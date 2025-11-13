@@ -1,0 +1,6 @@
+/venv
+/dataset/images
+/dataset/metadata
+/dataset/dataset_construction/*.csv
+/dataset/country_distributions/*.csv
+.DS_Store
