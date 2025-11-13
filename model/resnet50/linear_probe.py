@@ -16,8 +16,7 @@ def train_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, ba
     num_classes = input_df["class_id"].max() + 1
     train_df, val_df = train_test_split(
         input_df, 
-        test_size=0.2, 
-        stratify=input_df["class_id"],
+        test_size=0.05, 
         random_state=42
     )
     splits_dir = os.path.join(out_dir, "splits")
