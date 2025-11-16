@@ -4,13 +4,14 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
-from torchvision import models
 from sklearn.model_selection import train_test_split
+import clip
 import os
 from dataset import StreetViewImageDataset
+from clip_wrapper import ClipLinearProbe
 import time
-
-def train_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, base_lr):
+        
+def clip_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, base_lr):
     os.makedirs(out_dir, exist_ok=True)
     input_df = pd.read_csv(input_csv)
     num_classes = input_df["class_id"].max() + 1
@@ -26,34 +27,28 @@ def train_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, ba
     train_df.to_csv(train_csv, index=False)
     val_df.to_csv(val_csv, index=False)
 
-    weights = models.ResNet50_Weights.IMAGENET1K_V2
-    resnet50_transforms = weights.transforms()
+    device = torch.device('xpu' if torch.xpu.is_available() else 'cpu')
+    print(f"Using device: {device}")
+    if device.type == 'xpu':
+        print(f"Intel GPU: {torch.xpu.get_device_name(0)}")
 
-    train_dataset = StreetViewImageDataset(csv=train_csv, root_dir=root_dir, transform=resnet50_transforms)
-    val_dataset = StreetViewImageDataset(csv=val_csv, root_dir=root_dir, transform=resnet50_transforms)
+    clip_model, clip_preprocess = clip.load('ViT-B/32', device=device, jit=False)
+    clip_model = clip_model.float() # casts everything to fp32
+
+    train_dataset = StreetViewImageDataset(csv=train_csv, root_dir=root_dir, transform=clip_preprocess)
+    val_dataset = StreetViewImageDataset(csv=val_csv, root_dir=root_dir, transform=clip_preprocess)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
     dataloaders = {"train": train_dataloader, "val": val_dataloader}
     dataset_sizes = {"train": len(train_dataset), "val": len(val_dataset)}
-
-    device = torch.device('xpu' if torch.xpu.is_available() else 'cpu')
-    print(f"Using device: {device}")
-    if device.type == 'xpu':
-        print(f"Intel GPU: {torch.xpu.get_device_name(0)}")
     
-    model = models.resnet50(weights=weights)
-    for p in model.parameters():
-        p.requires_grad = False
-
-    in_features = model.fc.in_features
-    model.fc = nn.Linear(in_features, num_classes)
-
+    model = ClipLinearProbe(clip_model=clip_model, num_classes=num_classes)
     model = model.to(device)
 
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
-    optimizer = optim.SGD(model.fc.parameters(), lr=base_lr, momentum=0.9, weight_decay=1e-4)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
+    optimizer = optim.SGD(model.classifier.parameters(), lr=base_lr, momentum=0.9, weight_decay=1e-4)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=13, gamma=0.1)
 
     metrics_path = os.path.join(out_dir, "metrics.csv")
     best_path = os.path.join(out_dir, "best_model_params.pt")
@@ -153,12 +148,12 @@ def train_model(
 def main():
     input_csv = "dataset/metadata/processed/v2_h3_r2/train_metadata_with_ids.csv"
     root_dir = "."
-    out_dir = "model/resnet50/outputs/linear_probe_smoothing_wd"
-    batch_size = 64
+    out_dir = "model/clip/outputs/clip_linear_probe_higher_lr_and_batch"
+    batch_size = 128
     num_workers = 6 
-    base_lr = 0.01
+    base_lr = 0.03
 
-    model, paths = train_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, base_lr)
+    model, paths = clip_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, base_lr)
     print(paths)
 
 

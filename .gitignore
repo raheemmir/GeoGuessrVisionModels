@@ -4,3 +4,5 @@
 /dataset/dataset_construction/*.csv
 /dataset/country_distributions/*.csv
 .DS_Store
+/model/**/outputs
+/**/__pycache__

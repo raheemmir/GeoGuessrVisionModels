@@ -10,7 +10,7 @@ import os
 from dataset import StreetViewImageDataset
 import time
 
-def train_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, base_lr):
+def partial_finetune(input_csv, root_dir, out_dir, batch_size, num_workers, base_lr):
     os.makedirs(out_dir, exist_ok=True)
     input_df = pd.read_csv(input_csv)
     num_classes = input_df["class_id"].max() + 1
@@ -43,16 +43,33 @@ def train_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, ba
         print(f"Intel GPU: {torch.xpu.get_device_name(0)}")
     
     model = models.resnet50(weights=weights)
+    # freeze all parameters first
     for p in model.parameters():
         p.requires_grad = False
+    
+    print("After freezing all params :")
+    for name, param in model.named_parameters():
+        print(f"{name:40s} shape={tuple(param.shape)} requires_grad={param.requires_grad}")
 
     in_features = model.fc.in_features
     model.fc = nn.Linear(in_features, num_classes)
 
+    for name, param in model.named_parameters():
+        if name.startswith("layer4.") or name.startswith("fc."):
+            param.requires_grad = True
+    
+    print("After unfreezing layer4 + fc :")
+    for name, param in model.named_parameters():
+        if name.startswith("layer4.") or name.startswith("fc."):
+            print(f"{name:40s} shape={tuple(param.shape)} requires_grad={param.requires_grad}")
+
     model = model.to(device)
 
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
-    optimizer = optim.SGD(model.fc.parameters(), lr=base_lr, momentum=0.9, weight_decay=1e-4)
+    optimizer = optim.SGD([
+        {'params': model.layer4.parameters(), 'lr': base_lr * 0.1},
+        {'params': model.fc.parameters(), 'lr': base_lr}
+    ], momentum=0.9, weight_decay=1e-4)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
 
     metrics_path = os.path.join(out_dir, "metrics.csv")
@@ -153,12 +170,12 @@ def train_model(
 def main():
     input_csv = "dataset/metadata/processed/v2_h3_r2/train_metadata_with_ids.csv"
     root_dir = "."
-    out_dir = "model/resnet50/outputs/linear_probe_smoothing_wd"
+    out_dir = "model/resnet50/outputs/partial_fine_tune_smoothing_high_lr"
     batch_size = 64
     num_workers = 6 
     base_lr = 0.01
 
-    model, paths = train_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, base_lr)
+    model, paths = partial_finetune(input_csv, root_dir, out_dir, batch_size, num_workers, base_lr)
     print(paths)
 
 
