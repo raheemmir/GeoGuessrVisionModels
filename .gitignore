@@ -6,3 +6,5 @@
 .DS_Store
 /model/**/outputs
 /**/__pycache__
+/evaluation/plots
+/evaluation/results

@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 import clip
 import os
-from dataset import StreetViewImageDataset
+from model.resnet50.dataset import StreetViewImageDataset
 from clip_wrapper import ClipLinearProbe
 import time
         
@@ -47,8 +47,10 @@ def clip_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, bas
     model = model.to(device)
 
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
-    optimizer = optim.SGD(model.classifier.parameters(), lr=base_lr, momentum=0.9, weight_decay=1e-4)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=13, gamma=0.1)
+    # optimizer = optim.SGD(model.classifier.parameters(), lr=base_lr, momentum=0.9, weight_decay=1e-4)
+    optimizer = optim.AdamW(model.classifier.parameters(), lr=base_lr, weight_decay=0.01)
+    # scheduler = lr_scheduler.StepLR(optimizer, step_size=13, gamma=0.1)
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, mode="max", factor=0.5, patience=3, threshold=0.001, threshold_mode="abs", min_lr=1e-6)
 
     metrics_path = os.path.join(out_dir, "metrics.csv")
     best_path = os.path.join(out_dir, "best_model_params.pt")
@@ -64,7 +66,7 @@ def clip_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, bas
         optimizer=optimizer,
         scheduler=scheduler,
         device=device,
-        num_epochs=20,
+        num_epochs=40,
         metrics_path=metrics_path,
         best_path=best_path,
         last_path=last_path
@@ -81,7 +83,7 @@ def train_model(
         optimizer, 
         scheduler, 
         device,
-        num_epochs=20, 
+        num_epochs=40, 
         metrics_path=None, 
         best_path=None,
         last_path=None
@@ -120,8 +122,8 @@ def train_model(
                         optimizer.step()
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += (preds == labels).sum().item() # torch.sum(preds == labels)
-            if phase == 'train':
-                scheduler.step()
+            # if phase == 'train':
+            #     scheduler.step()
             
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects / dataset_sizes[phase]
@@ -130,9 +132,14 @@ def train_model(
             with open(metrics_path, "a") as f:
                 f.write(f"{epoch},{phase},{epoch_loss},{epoch_acc}\n")
             
-            if phase == "val" and epoch_acc > best_acc:
-                best_acc = epoch_acc
-                torch.save(model.state_dict(), best_path)
+            # if phase == "val" and epoch_acc > best_acc:
+            #     best_acc = epoch_acc
+            #     torch.save(model.state_dict(), best_path)
+            if phase == "val":
+                scheduler.step(epoch_acc)
+                if epoch_acc > best_acc:
+                    best_acc = epoch_acc
+                    torch.save(model.state_dict(), best_path)
             
         torch.save(model.state_dict(), last_path) # save every epoch
         print(f'Saved checkpoint to {last_path}')
@@ -148,11 +155,10 @@ def train_model(
 def main():
     input_csv = "dataset/metadata/processed/v2_h3_r2/train_metadata_with_ids.csv"
     root_dir = "."
-    out_dir = "model/clip/outputs/clip_linear_probe_higher_lr_and_batch"
-    batch_size = 128
-    num_workers = 6 
-    base_lr = 0.03
-
+    out_dir = "model/clip/outputs/clip_vitb32_linear_probe_lr_1e-3_bs_64_adamw_rlrop_epochs_40"
+    batch_size = 64
+    num_workers = 8
+    base_lr = 0.001
     model, paths = clip_linear_probe(input_csv, root_dir, out_dir, batch_size, num_workers, base_lr)
     print(paths)
 
