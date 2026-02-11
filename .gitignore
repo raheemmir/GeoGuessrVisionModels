@@ -8,3 +8,5 @@
 /**/__pycache__
 /evaluation/plots
 /evaluation/results
+/evaluation/*.ipynb
+/v2/assets/sampled_*
