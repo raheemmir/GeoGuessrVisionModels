@@ -10,3 +10,9 @@
 /evaluation/results
 /evaluation/*.ipynb
 /v2/assets/sampled_*
+/v2/assets/images/
+/v2/assets/*h3*.csv
+/v2/assets/*.json
+/v2/evaluation/demo_samples
+/v2/evaluation/results
+/v2/training/outputs

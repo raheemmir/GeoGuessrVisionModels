@@ -2,12 +2,15 @@ import pandas as pd
 import h3
 import os
 
-train_csv = "dataset/metadata/processed/v1_with_paths/train_metadata.csv"
-test_csv = "dataset/metadata/processed/v1_with_paths/test_metadata.csv"
-output_root = "dataset/metadata/processed/analysis"
-resolution = 2
+SAMPLED_TRAIN_METADATA = "v2/assets/sampled_train_metadata_cleaned.csv"
+SAMPLED_VAL_METADATA = "v2/assets/sampled_val_metadata_cleaned.csv"
+SAMPLED_TEST_METADATA = "v2/assets/sampled_test_metadata_cleaned.csv"
+TRAIN_SPLIT = "train"
+VAL_SPLIT = "val"
+TEST_SPLIT = "test"
+OUTPUT_ROOT = "v2/assets"
 
-def analyze_geocell_country_coverage(input_csv, split_name):
+def analyze_geocell_country_coverage(input_csv, split_name, resolution):
     df = pd.read_csv(input_csv)
     country_stats = {}
     for i in range(len(df)):
@@ -36,15 +39,20 @@ def analyze_geocell_country_coverage(input_csv, split_name):
     print(f"Top 20 countries by image count: ")
     print(output_df.head(20).to_string(index=False))
 
-    os.makedirs(output_root, exist_ok=True)
     output_filename = f"h3_r{resolution}_country_stats_{split_name}.csv"
-    output_path = os.path.join(output_root, output_filename)
+    output_path = os.path.join(OUTPUT_ROOT, output_filename)
     output_df.to_csv(output_path, index=False)
     print(f"[{split_name}] saved -> {output_path}")
 
 def main():
-    analyze_geocell_country_coverage(train_csv, "train")
-    analyze_geocell_country_coverage(test_csv, "test")
+    resolutions = [1, 2, 3]
+    for r in resolutions:
+        print(f"Split: {TRAIN_SPLIT}, Resolution: {r}")
+        analyze_geocell_country_coverage(SAMPLED_TRAIN_METADATA, TRAIN_SPLIT, r)
+        print(f"Split: {VAL_SPLIT}, Resolution: {r}")
+        analyze_geocell_country_coverage(SAMPLED_VAL_METADATA, VAL_SPLIT, r)
+        print(f"Split: {TEST_SPLIT}, Resolution: {r}")
+        analyze_geocell_country_coverage(SAMPLED_TEST_METADATA, TEST_SPLIT, r)
 
 if __name__ == "__main__":
     main()
